@@ -12,14 +12,15 @@ int max_fd = 0;
 fd_set readfds, writefds, setfds;
 int client_nb = 0;
 int clientfd_id[4096];
-char readbuf[10000];
-char writebuf[10000];
-char savebuf[10000];
+char readbuf[4096 * 42];
+char writebuf[4096 * 42 + 42];
+char savebuf[4096 * 42];
 
 
-void print_error(char *error)
+void print_error()
 {
-	write(2, error, strlen(error));
+	write(2, "Fatal error\n", strlen("Fatal error\n"));
+	exit(1);
 }
 
 void sendToAll(int sender)
@@ -48,23 +49,16 @@ int main (int argc, char** argv)
 	serv.sin_addr.s_addr = (1 << 24) | 127;
 
 	if((serv_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-	{
-		print_error("Fatal error\n");
-		exit (1);
-	}
+		print_error();
 	if((bind(serv_fd, (struct sockaddr*)&serv, sizeof(serv))) < 0)
 	{
 		close(serv_fd);
-		print_error("Fatal error\n");
-		exit (1);
-
+		print_error();
 	}
 	if((listen(serv_fd, 10)) < 0)
 	{
 		close(serv_fd);
-		print_error("Fatal error\n");
-		exit (1);
-
+		print_error();
 	}
 	bzero(clientfd_id, sizeof(clientfd_id));
 	FD_ZERO(&setfds);
@@ -141,4 +135,3 @@ int main (int argc, char** argv)
 	}
 	return (0);
 }
-
