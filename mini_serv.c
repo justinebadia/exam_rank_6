@@ -12,59 +12,53 @@ int max_fd = 0;
 fd_set readfds, writefds, setfds;
 int client_nb = 0;
 int clientfd_id[4096];
-char readbuf[10000];
-char writebuf[10000];
-char savebuf[10000];
+int currentmsg[4096];
+char readbuf[4096 * 42];
+char writebuf[4096 * 42 + 42];
+char savebuf[4096 * 42];
 
-
-void print_error(char *error)
+void print_error()
 {
-	write(2, error, strlen(error));
+	write(2, "Fatal error\n", strlen("Fatal error\n"));
+	exit(1);
 }
 
 void sendToAll(int sender)
 {
-	for(int i = 0; i <= max_fd; i++)
+	for (int i = 0; i <= max_fd; i++)
 	{
 		if (FD_ISSET(i, &writefds) && i != sender)
 			send(i, writebuf, strlen(writebuf), 0);
 	}
 }
 
-int main (int argc, char** argv)
+int main(int argc, char **argv)
 {
 	int ret_recv = 0;
 	if (argc != 2)
 	{
-		print_error("Wrong number of arguments\n");
-		exit (1);
+		write(2, "Wrong number of arguments\n", strlen("Wrong number of arguments\n"));
+		exit(1);
 	}
-	
-	//setting up server
+
+	// setting up server
 	port = atoi(argv[1]);
 	struct sockaddr_in serv;
 	serv.sin_family = AF_INET;
 	serv.sin_port = htons(port);
 	serv.sin_addr.s_addr = (1 << 24) | 127;
 
-	if((serv_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-	{
-		print_error("Fatal error\n");
-		exit (1);
-	}
-	if((bind(serv_fd, (struct sockaddr*)&serv, sizeof(serv))) < 0)
+	if ((serv_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		print_error();
+	if ((bind(serv_fd, (struct sockaddr *)&serv, sizeof(serv))) < 0)
 	{
 		close(serv_fd);
-		print_error("Fatal error\n");
-		exit (1);
-
+		print_error();
 	}
-	if((listen(serv_fd, 10)) < 0)
+	if ((listen(serv_fd, 128)) < 0)
 	{
 		close(serv_fd);
-		print_error("Fatal error\n"); 
-		exit (1);
-
+		print_error();
 	}
 	bzero(clientfd_id, sizeof(clientfd_id));
 	bzero(&savebuf, sizeof(savebuf));
@@ -78,32 +72,33 @@ int main (int argc, char** argv)
 	while (1)
 	{
 		readfds = writefds = setfds;
-		if((select(max_fd + 1, &readfds, &writefds, 0, 0)) <= 0)
+		if ((select(max_fd + 1, &readfds, &writefds, 0, 0)) <= 0)
 			continue;
 		for (int client = 0; client <= max_fd; client++)
 		{
 
 			if (FD_ISSET(client, &readfds)) // si le fd du client est prêt à recv des données
 			{
-				if (client == serv_fd) //nouvelle connexion
+				if (client == serv_fd) // nouvelle connexion
 				{
 					struct sockaddr_in new_client;
 					socklen_t len = sizeof(new_client);
 					int client_fd;
 
-					if((client_fd = accept(serv_fd, (struct sockaddr*)&new_client, &len)) == -1)
-						continue ; //le client n'est pas ajouté
+					if ((client_fd = accept(serv_fd, (struct sockaddr *)&new_client, &len)) == -1)
+						continue; // le client n'est pas ajouté
 					FD_SET(client_fd, &setfds);
 					clientfd_id[client_fd] = client_nb++;
-					if(max_fd < client_fd)
+					currentmsg[client_fd] = 0;
+					if (max_fd < client_fd)
 						max_fd = client_fd;
 					sprintf(writebuf, "server: client %d just arrived\n", clientfd_id[client_fd]);
 					sendToAll(serv_fd);
 					break;
 				}
-				else 
+				else
 				{
-					if((ret_recv = recv(client, readbuf, sizeof(readbuf), 0)) <= 0) //client ferme sa connexion
+					if ((ret_recv = recv(client, readbuf, 1, 0)) <= 0) // client ferme sa connexion
 					{
 						sprintf(writebuf, "server: client %d just left\n", clientfd_id[client]);
 						sendToAll(client);
@@ -118,10 +113,14 @@ int main (int argc, char** argv)
 						while (readbuf[i])
 						{
 							savebuf[j] = readbuf[i];
-							if(savebuf[j] == '\n')
+							if (savebuf[j] == '\n')
 							{
-								savebuf[j + 1] ='\0';
-								sprintf(writebuf, "client %d: %s", clientfd_id[client], savebuf);
+								savebuf[j + 1] = '\0';
+								if (currentmsg[client])
+									sprintf(writebuf, "%s", savebuf);
+								else
+									sprintf(writebuf, "client %d: %s", clientfd_id[client], savebuf);
+								currentmsg[client] = 0;
 								sendToAll(client);
 								bzero(&savebuf, sizeof(savebuf));
 								bzero(&writebuf, sizeof(writebuf));
@@ -129,11 +128,15 @@ int main (int argc, char** argv)
 							}
 							else if (i == ret_recv - 1) // pas de \n mais la fin du msg
 							{
-								sprintf(writebuf, "client %d: %s", clientfd_id[client], savebuf);
+								if (currentmsg[client])
+									sprintf(writebuf, "%s", savebuf);
+								else
+									sprintf(writebuf, "client %d: %s", clientfd_id[client], savebuf);
+								currentmsg[client] = 1;
 								sendToAll(client);
 								bzero(&savebuf, sizeof(savebuf));
 								bzero(&writebuf, sizeof(writebuf));
-								j = -1;
+								break;
 							}
 							i++;
 							j++;
@@ -147,4 +150,3 @@ int main (int argc, char** argv)
 	}
 	return (0);
 }
-
