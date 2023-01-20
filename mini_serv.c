@@ -62,11 +62,15 @@ int main (int argc, char** argv)
 	if((listen(serv_fd, 10)) < 0)
 	{
 		close(serv_fd);
-		print_error("Fatal error\n");
+		print_error("Fatal error\n"); 
 		exit (1);
 
 	}
 	bzero(clientfd_id, sizeof(clientfd_id));
+	bzero(&savebuf, sizeof(savebuf));
+	bzero(&writebuf, sizeof(writebuf));
+	bzero(&readbuf, sizeof(readbuf));
+
 	FD_ZERO(&setfds);
 	FD_SET(serv_fd, &setfds);
 	max_fd = serv_fd;
@@ -78,6 +82,7 @@ int main (int argc, char** argv)
 			continue;
 		for (int client = 0; client <= max_fd; client++)
 		{
+
 			if (FD_ISSET(client, &readfds)) // si le fd du client est prêt à recv des données
 			{
 				if (client == serv_fd) //nouvelle connexion
@@ -113,8 +118,9 @@ int main (int argc, char** argv)
 						while (readbuf[i])
 						{
 							savebuf[j] = readbuf[i];
-							if(readbuf[i] == '\n')
+							if(savebuf[j] == '\n')
 							{
+								savebuf[j + 1] ='\0';
 								sprintf(writebuf, "client %d: %s", clientfd_id[client], savebuf);
 								sendToAll(client);
 								bzero(&savebuf, sizeof(savebuf));
